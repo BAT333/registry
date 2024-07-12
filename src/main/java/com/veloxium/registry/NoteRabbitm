@@ -1,0 +1,363 @@
+primeiro de tudo nos tem instalar eler ou instalar img dele
+deste jeito pelo docker
+# latest RabbitMQ 3.10
+docker run -it --rm --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3.10-management
+localhost:15672 -> site para acessar
+qualquer coisa outras coisas estão aqui
+https://hub.docker.com/_/rabbitmq/
+
+senha e user padrão
+Username: guest
+Password: guest
+
+Primeiramente, vou criar uma pasta chamada rabbit e um novo arquivo chamado docker-compose.yml.
+Nele podemos colocar as informações básicas abaixo, que correspondem aos mesmos parâmetros que
+usamos ao criar o container com o comando docker run. Aqui ainda acrescentei variáveis de ambiente
+para definir um usuário e uma senha padrão, para que não seja mais possível logar com guest.
+
+
+version: "3.6"
+
+services:
+    rabbitmq:
+        image: rabbitmq:3.10-management
+        container_name: rabbitmq
+        restart: always
+        ports:
+            - 5672:5672
+            - 15672:15672
+        volumes:
+            - ./dados:/var/lib/rabbitmq/
+        environment:
+            - RABBITMQ_DEFAULT_USER=jacqueline
+            - RABBITMQ_DEFAULT_PASS=aluraCOPIAR CÓDIGO
+Com o arquivo pronto, basta digitar o comando docker-compose up para criar
+e executar o RabbitMQ automaticamente. Para finalizar, o procedimento é
+igualmente simples, bastando digitar o comando docker-compose down.
+
+docker-compose up
+
+docker-compose down
+
+
+docker-compose -f mysql-docker-compose.yml up -d
+ou esse aqui quando precisa especificar
+
+----------------------------------------CONFIGURANDO PROJETO----------------------------------------------------------
+PRIMEIRO TEMOS QUE ADD A DEPENDENCIA
+<dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+</dependency>
+
+NO APPLICANTION
+spring.rabbitmq.host=localhost
+spring.rabbitmq.port=5672
+spring.rabbitmq.username=rafael
+spring.rabbitmq.password=rafael234
+
+configuração do rabbitmq
+depois criar uma class de configuração
+
+package com.veloxium.registry.infra.ampq;
+
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.context.annotation.Bean;
+
+public class RegisterAMPQConfiguration {
+    @Bean
+    public Queue creatingQueue(){
+        //return new Queue("registered.completed",false);
+        return QueueBuilder.nonDurable("registered.completed").build();
+    }
+}
+
+ @Bean
+    public Queue creatingQueue(){
+        //return new Queue("registered.completed",false);
+        return QueueBuilder.nonDurable("registered.completed").build();
+    }
+    AQUI SERVE PARA CRIAR UMA FILA NO SEU RABBITM CRIA UMA FILA COM NOME QUE VC COLOCOU
+    E SE ESSA FILA DURAVEL OU NÃO, ESSA SÃO DUAS FORMAS DE CRIAR ESSA FILA
+
+    AGORA PARA FAZER  OPERAÇÃO ADIMINISTRATIVA
+    NÃO PRECISA CRIAR UM RABBITM ADM, OQ É ?
+    Mas para realizarmos operações administrativas no RabbitMQ, precisamos declarar um método que retorna um RabbitAdmin. Vamos analisar a documentação!
+ Nesta documentação, em "Constructor Summary", ele nos informa que para montar o construtor, precisamos de uma ConnectionFactory ou de um RabbitTemplate. No caso, não usaremos este último, porque ele é mais voltado para o envio das mensagens, vamos utilizá-lo no controlador. Portanto, vamos usar a ConnectionFactory.
+    Class RabbitAdmine
+    PARA CRIAR UMA CON para fazer uma con,
+    @Bean
+        public RabbitAdmin rabbitAdmin(ConnectionFactory connectionFactory){
+            return new RabbitAdmin(connectionFactory);
+        }
+   agora precisamos de um jeito inicializar quando nos inicia nossas aplicação
+   como se faz isso
+       @Bean
+       public ApplicationListener<ApplicationReadyEvent> startingRabbitAdimin(RabbitAdmin rabbitAdmin){
+           return event -> rabbitAdmin.initialize();
+       }
+
+
+       Além de criar o nome da fila e o Rabbit Admin, precisamos de uma forma de inicializar o RabbitMQ ao subirmos a aplicação, isto é, sincronizar para conseguir realizar as operações. Para isso, vamos usar uma interface chamada ApplicationListener.
+
+       public ApplicationListener<>COPIAR CÓDIGO
+       Ao digitarmos "ApplicationListener", por padrão, já aparece um menu com algumas opções, em que escolheremos a "ApplicationReadyEvent org.springframework.boot.context.event". O nome será inicializaAdmin e passaremos como parâmetro o RabbitAdmin.
+-----------------------------------------------NO FINAL CLASS FICA ASSIM------------------------------------------------------------------------
+package com.veloxium.registry.infra.ampq;
+
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationListener;
+import org.springframework.context.annotation.Bean;
+
+public class RegisterAMPQConfiguration {
+    @Bean
+    public Queue creatingQueue(){
+        //return new Queue("registered.completed",false);
+        return QueueBuilder.nonDurable("registered.completed").build();
+    }
+    @Bean
+    public RabbitAdmin rabbitAdmin(ConnectionFactory connectionFactory){
+        return new RabbitAdmin(connectionFactory);
+    }
+    @Bean
+    public ApplicationListener<ApplicationReadyEvent> startingRabbitAdimin(RabbitAdmin rabbitAdmin){
+        return event -> rabbitAdmin.initialize();
+    }
+}
+-------------------------------------------------Publicando mensagens-----------------------------------------------------------------------------------------------------
+@Autowired
+private RabbitTemplate template;
+var message =  new Message(("CRIEI USER COM ID"+ employee.id()).getBytes());
+template.send("registered.completed",message);
+vc instancia RabbitTemplate que envia mensagem
+e depois usar .sende, e tem ass a fila que vc criou que no nosso caso registered.completed
+e mensagem que vau ser enviada com ela vc cria variavel de mensagem
+
+sempre usando essas dependencias
+import org.springframework.amqp.core.Message;
+--------------------------------------RECEBER MENSAGEM-------------------------------------------------------------------------------------------
+PRIMEIRO VC CONFIGURA TODO LOCAL , COLOCANDO AS DEPENDENCIAS, COLOCANDO O COMO CONECATAR TUDO MAIS
+PRECISA FAZER UMA CLASSE PARA LER OU RECEBER UMA CLASS
+agora precisamos criar uma nova classe para declarar como vamos receber e ler mensagens de uma fila. Para isso, usaremos o Rabbit Listener.
+
+O Rabbit Listener é uma interface que permite o recebimento de mensagens de uma fila ou dado
+um bind com alguma exchange. Na documentação, em "Optional Element Summary"
+(em português, "Resumo do elemento opcional"), há várias opções que você pode analisar,
+mas vamos trabalhar com a queues.
+
+PARA ISSO VAMOS CRIAR UMA CLASS
+
+por padrão nos coloca nome do que vamos receber
+RegisterListener
+
+e assim recebe uma mensagem
+  @RabbitListener(queues = "registered.completed")
+    public void  receivingMessage(Message message){
+        System.out.println("RECEBI TAL MENSAGEM "+ message.toString());
+    }
+----------------------------------------------Transferindo representações---------------------------------------------------------------
+COMO TRASFERIR UM OBJETO INTEIRO
+rabbitTemplate.convertAndSend("pagamentos.concluido", pagamento);
+convertAndSend
+SERVE PARA TRASFERIR UM OBJETO OU UM DTO INTEIRO
+MAS MESMO ASSIM DA ERRO POR QUE PRECISA QUE SEJA EM BYTE
+COMO RESOLVER
+
+Para isso nos temos que trocar conversor padrão para outro que suporta esse tipo de transferência
+e qual vamos usar
+Ao invés de usarmos o SimpleMessageConverter, em que não informamos nada, somente passamos o pagamento e mandamos ele tentar enviar, usaremos o
+Jackson2JsonMessageConverter.
+para isso precisamos avisar na configuração que vamos usar um metodo diferente de conversão
+
+na classe de configuração
+
+ so add a dependencia com bean de conversão
+   @Bean
+     public Jackson2JsonMessageConverter messageConverter(){
+         return new Jackson2JsonMessageConverter();
+     }
+Tbm nos temos que falar que vai ter essa mudança no rabbitTemplate que vai ter essa mudança e
+conversão
+como faremos isso ?
+oq faz isso é o setMessageConverter que faz essa mudança
+
+assim fica nesse final
+    @Bean
+    public RabbitTemplate template(ConnectionFactory connectionFactory,Jackson2JsonMessageConverter messageConverter){
+        var rabbit = new RabbitTemplate(connectionFactory);
+        rabbit.setMessageConverter(messageConverter);
+        return rabbit;
+    }
+mostrando que template tem essa mudanças
+no final fica assim essa class
+package com.example.userSeguranca.config.ampq;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationListener;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class RegisterAMPQConfiguration {
+    @Bean
+    public Queue creatingQueue(){
+        //return new Queue("registered.completed",false);
+        return QueueBuilder.nonDurable("registered.completed").build();
+    }
+    @Bean
+    public RabbitAdmin rabbitAdmin(ConnectionFactory connectionFactory){
+        return new RabbitAdmin(connectionFactory);
+    }
+    @Bean
+    public ApplicationListener<ApplicationReadyEvent> startingRabbitAdimin(RabbitAdmin rabbitAdmin){
+        return event -> rabbitAdmin.initialize();
+    }
+    @Bean
+    public Jackson2JsonMessageConverter messageConverter(){
+        return new Jackson2JsonMessageConverter();
+    }
+    @Bean
+    public RabbitTemplate template(ConnectionFactory connectionFactory,Jackson2JsonMessageConverter messageConverter){
+        var rabbit = new RabbitTemplate(connectionFactory);
+        rabbit.setMessageConverter(messageConverter);
+        return rabbit;
+    }
+}
+--------------------------------------------------Manipulando os dados recebidos------------------------------------------------------------
+PARA RECEBER OS DADOS PRIMEIRO PRECISAMOS QUE TENHA UMA CLASS IGUAL RECEBENDO
+COM ID NOME ETC
+
+POR EXEMPLO CLASS QUE ESTA MANDANDO MINHA É ESSA
+package com.example.userSeguranca.infra.controller.modal;
+
+import jakarta.validation.constraints.NotNull;
+import jdk.jfr.Name;
+CLASS ENVIANDO
+public record DataLoginsDTO(
+        Long id,
+        @NotNull
+        String login,
+        @NotNull
+        String password
+
+) {
+}
+PRECISA TER UMA CLASS PARECIDA PARA RECEBER
+class que esta recebendo minha praticamente a mesma com mesmo nome tudo mais
+CLASS RECEBENDO
+public record DataLoginsDTO(
+        Long id,
+        @NotNull
+        String login,
+        @NotNull
+        String password
+
+) {
+}
+SE TIVER ENUM OUTRAS CLASS COM RECEBIMENTOS A MAIS TEM CRIAR CLASS PARECIDAS TBM
+
+
+para receber class tem criar class de configuração com padrão de recebimento
+por exemplo nos usamos Jackson2JsonMessageConverter e temos que informa que esse tipo de recebimento
+tbm
+
+assim fica class de configuração
+package com.veloxium.registry.infra.ampq;
+
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class RegistryAMPQconfig {
+    @Bean
+    public Jackson2JsonMessageConverter messageConverter(){
+        return new Jackson2JsonMessageConverter();
+    }
+    @Bean
+    public RabbitTemplate template(ConnectionFactory connectionFactory, Jackson2JsonMessageConverter messageConverter){
+        var rabbit = new RabbitTemplate(connectionFactory);
+        rabbit.setMessageConverter(messageConverter);
+        return rabbit;
+    }
+}
+
+AGORA NOS TEMOS QUE CONFIGURA LISTENER PARA MOSTRA COMO ELE VAI RECEBER
+-------------------------------------Trabalhando com exchanges-----------------------------------------------------------------------------
+PARA QUE UMA FILA MANDE MENSAGEM PARA UM OU MAIS MS
+
+Fanout exchange com implementar
+vamos começando a excluir uma fila
+  @Bean
+    public Queue creatingQueue(){
+        //return new Queue("registered.completed",false);
+        return QueueBuilder.nonDurable("registered.completed").build();
+    }
+
+POR QUE VAMOS PRECISAR SO DE UMA EXCHANGE NÃO UMA FILA INTEIRA POR MOTIVOS QUE EXCHANGE
+COM EXCHANGE AS FILAS E APLICAÇÃO VÃO PROPRIAS SE CRIAR E IMPLEMENTAR
+
+
+AGORA INVES DESTA FILA VAMOS CRIAR UMA FANOUTEXCHANGE COMO SE CRIA
+  @Bean
+    public FanoutExchange fanoutExchange(){
+        return new FanoutExchange("login.ex");
+    }
+e colocar nome que vai criar tudo mais  esse FANOUTEXCHANGE
+depois nos temos que modificar  controller
+por que nos não vamos mais mandar para uma fila (registered.completed) mas sim para
+para um fanoutExchange(login.ex)
+e ficara assim
+template.convertAndSend("login.ex","",user);
+bom vc vai mandar so para ex, mas se vc quiser que esse ex mande para uma especifica colocava tbm
+fila que vc quer mandar
+--------------------------------quem vai receber---------------------------------------------------
+primeiro vamos trasferir reposnsabilidade que vai criar a fila agora é quem vai receber
+
+assim vai ficar fila criada
+ @Bean
+    public Queue creatingQueue(){
+        //return new Queue("registered.completed",false);
+        return QueueBuilder.nonDurable("registered.completed").build();
+    }
+
+essa fila criada onde tem Listener
+
+e para dizer qual Exchange ta recebendo nos temos que criar bean dizendo isso
+    @Bean
+    public FanoutExchange fanoutExchange(){
+        return ExchangeBuilder
+                .fanoutExchange("login.ex").build();
+    }
+agora nos precisamos ligar os dois
+assim vc liga
+    @Bean
+    public Binding binding(FanoutExchange exchange){
+        return BindingBuilder.bind(creatingQueue()).to(fanoutExchange());
+    }
+    vc diz qual é fila e qual fanout
+
+    e tbm precisa do
+      @Bean
+        public RabbitAdmin rabbitAdmin(ConnectionFactory connectionFactory){
+            return new RabbitAdmin(connectionFactory);
+        }
+        @Bean
+        public ApplicationListener<ApplicationReadyEvent> startingRabbitAdimin(RabbitAdmin rabbitAdmin){
+            return event -> rabbitAdmin.initialize();
+        }
+        para poder inicialize e mostra o admin
+
+
