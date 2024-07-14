@@ -25,15 +25,40 @@ public class RegistryAMPQconfig {
     @Bean
     public Queue creatingQueue(){
         //return new Queue("registered.completed",false);
-        return QueueBuilder.nonDurable("registered.completed").build();
+        return QueueBuilder
+                .nonDurable("registered.completed")
+                .deadLetterExchange("login.dlx")
+                .build();
     }
     @Bean
     public FanoutExchange fanoutExchange(){
         return ExchangeBuilder
                 .fanoutExchange("login.ex").build();
     }
+
+
     @Bean
-    public Binding binding(FanoutExchange exchange){
+    public FanoutExchange deadLetterExchange() {
+        return ExchangeBuilder
+                .fanoutExchange("login.dlx")
+                .build();
+    }
+    @Bean
+    public Queue queueDlq() {
+        return QueueBuilder
+                .nonDurable("registered.completed-dlq")
+                .build();
+    }
+    @Bean
+    public Binding bindDlxPagamentoPedido() {
+        return BindingBuilder
+                .bind(queueDlq())
+                .to(deadLetterExchange());
+    }
+
+
+    @Bean
+    public Binding binding(){
         return BindingBuilder.bind(creatingQueue()).to(fanoutExchange());
     }
     @Bean

@@ -360,4 +360,139 @@ assim vc liga
         }
         para poder inicialize e mostra o admin
 
+------------------------------------------------------------------------------------------------------------------------
+Como citei algumas vezes ao longo dos vídeos anteriores, uma mensagem nunca é enviada diretamente para uma fila, ela sempre é direcionada para uma exchange, que será responsável por encaminhar as mensagens para diversas filas que estiverem conectadas a ela. Quando fazemos o envio sem informar a exchange, o próprio RabbitMQ já utiliza uma exchange do tipo default por debaixo dos panos, como vimos na aula anterior.
 
+Quando optamos por informar a exchange, ao criá-la em nossa aplicação, temos algumas opções, que vou relembrar aqui:
+
+Direct: Esse tipo de exchange é usada, geralmente, quando desejamos enviar mensagens para um consumidor específico. Para isso, utilizamos uma routing key, que é uma chave enviada junto com a mensagem para que a exchange identifique qual a fila irá receber a mensagem.
+Fanout: Quando enviamos uma mensagem para uma exchange desse tipo, ela vai ser enviada para todas as filas que estiverem ligadas a essa exchange. Ou seja, se existirem 30 filas ligadas a essa exchange, essas 30 filas receberão a mensagem. Para conectar uma fila a uma exchange é preciso criar um bind, que é uma relação (ou vínculo) entre uma fila e uma exchange. Nomeia-se como binding key essa chave de ligação entre a fila e a exchange.
+Headers: É um tipo muito menos usado, mas basicamente ignora o routing key e passa no próprio cabeçalho da mensagem para qual binding key deve ser encaminhada a mensagem.
+Topic: A palavra-chave desse tipo de exchange é flexibilidade. Você pode nomear as binding keys de uma forma a criar padrões e/ou regras para que o envio seja de forma personalizada. Essas binding keys são descritas como se fossem expressões regulares. Dessa forma, podemos fazer composições para que mais de um consumidor receba as mensagens. Vou exemplificar abaixo:
+alt text: Recorte da tela do RabbitMQ Simulator, em fundo branco, simulando o envio de uma mensagem do produtor “pedido” para mais de um consumidor utilizando uma topic exchange. O primeiro consumidor (“estoque”) recebe a mensagem de uma topic exchange, que envia a mensagem por meio de uma binding key “pedido.*” para a fila nomeada como “fila-estoque”. O segundo consumidor (“pagamento”) recebe a mensagem da mesma topic exchange, por meio de uma binding key “*.pagamento” que a direciona para a fila nomeada como “fila-pagamento”. Por fim, o terceiro consumidor (“financeiro”) recebe a mensagem pela topic exchange, por meio de uma binding key “pedido.*”, que a direciona para a fila denominada “fila-financeiro”.
+
+Suponha que eu tenha uma aplicação produtora, chamada pedido. E em um determinado momento seja necessário mandar mensagem para apenas dois consumidores: o estoque, para confirmar se tem os itens do pedido, e para o financeiro, para ver se o cliente desse pedido tem alguma pendência.
+
+Num segundo momento, eu vou querer enviar uma mensagem para esses dois consumidores e mais um terceiro, que é o pagamento. Para isso, configurei as minhas binding keys da seguinte forma:
+
+As binding keys da fila-estoque e da fila-financeiro com a exchange, configurei como pedido.*
+
+Já a binding key da fila-pagamento com a exchange, configurei como *.pagamento
+
+Caso o pedido envie uma mensagem com a routing key pedido.criado, por exemplo, tanto o estoque quanto o financeiro receberão a mensagem, pois a routing key se enquadra no padrão que foi definido na binding key.
+
+Caso o pedido envie uma mensagem com a routing key pedido.pagamento, os três consumidores receberão a mensagem, pois o roteamento atende aos dois padrões.
+
+Dessa forma, é possível compor e estabelecer padrões para definir envios com rotas diferenciadas, baseado em alguma situação específica que somente uns ou outros consumidores precisem receber as mensagens.
+
+Para melhor aproveitamento e performance no uso do RabbitMQ, é importante entender e modelar corretamente os tipos de exchanges para que se possa garantir uma comunicação eficiente entre os produtores e consumidores.
+
+
+
+------------------------------------Lidando com falhas----------------------------------------------------------------------------------------------------------
+spring.rabbitmq.listener.simple.retry.enabled=true
+spring.rabbitmq.listener.simple.retry.max-attempts=4
+
+
+aqui faz que ele tenta processar a mensagem novamente, pelo numero de tentativa de 4 vezes
+se der errado para de tentar e segue para outra
+
+spring.rabbitmq.listener.simple.retry.initial-interval=5000
+spring.rabbitmq.listener.simple.retry.multiplier=1
+spring.rabbitmq.listener.simple.retry.max-interval=300000
+aqui para fazer maximo de tempo para cada tentativa
+--------------------------------------DLQs e DLXs---------------------------------------------------------------------------------
+redireciona o erro para um lugar que tem mensagem morta
+isso tudo pode ser resolvido na class que tem listener
+
+primeiro tem criar fanout que represente onde essa mensagem vai ser mandanda ou enviada
+caso de algum erro
+    @Bean
+    public FanoutExchange deadLetterExchange() {
+        return ExchangeBuilder
+                .fanoutExchange("login.dlx")
+                .build();
+    }
+
+e depois criar a fila para onde ela vai ser jogada para ficar esperando
+ @Bean
+    public Queue filaDlqDetalhesAvaliacao() {
+        return QueueBuilder
+                .nonDurable("pagamentos.detalhes-avaliacao-dlq")
+                .build();
+    }
+depois para fazer união deste dois
+  @Bean
+    public Binding bindDlxPagamentoPedido() {
+        return BindingBuilder
+                .bind(filaDlqDetalhesAvaliacao())
+                .to(deadLetterExchange());
+    }
+
+agora para indicar para onde mensagem morta ou mensagem que teve erro deve ser mandada
+so na propria hora de criar a fila indicar o deadLetterExchange e indicar o fanoutExchange que vai ser mandando
+  @Bean
+    public Queue creatingQueue(){
+        //return new Queue("registered.completed",false);
+        return QueueBuilder
+                .nonDurable("registered.completed")
+                .deadLetterExchange("login.dlx")
+                .build();
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    Depois, vamos configurar em application.properties o número máximo de tentativas, para que as mensagens com erro não atrapalhem o fluxo das mensagens posteriores. Posso configurar também intervalos para essas novas tentativas, para que não ocorram imediatamente após a tentativa anterior.
+
+    spring.rabbitmq.listener.simple.retry.enabled=true
+    spring.rabbitmq.listener.simple.retry.max-attempts=5
+    spring.rabbitmq.listener.simple.retry.initial-interval=5000
+    spring.rabbitmq.listener.simple.retry.multiplier=2
+    spring.rabbitmq.listener.simple.retry.max-interval=300000COPIAR CÓDIGO
+    Para que as mensagens com erro sejam direcionadas a outra fila, na classe AvaliacaoAMQPConfiguration precisamos criar a dead letter queue, a dead letter exchange e vinculá-las através do Binding:
+
+    @Bean
+        public Queue filaDlqDetalhesAvaliacao() {
+            return QueueBuilder
+                    .nonDurable("pagamentos.detalhes-avaliacao-dlq")
+                    .build();
+        }
+
+    @Bean
+        public FanoutExchange deadLetterExchange() {
+            return ExchangeBuilder
+                    .fanoutExchange("pagamentos.dlx")
+                    .build();
+        }
+
+     @Bean
+        public Binding bindDlxPagamentoAvaliacao() {
+            return BindingBuilder
+                    .bind(filaDlqDetalhesAvaliacao())
+                    .to(deadLetterExchange());
+        }COPIAR CÓDIGO
+    Por fim, precisamos indicar, em nossa fila principal, o nome da dead letter exchange para qual ela deve encaminhar as mensagens não processadas:
+
+     @Bean
+        public Queue filaDetalhesAvaliacao() {
+            return QueueBuilder
+                    .nonDurable("pagamentos.detalhes-avaliacao")
+                    .deadLetterExchange("pagamentos.dlx")
+                    .build();
+        }
+
+---------------------------------------------Movendo mensagens da DLQ----------------------------------------------------------
+uma das alternativa é "Move messages"., no dlq
+vc coloca no dlq na fila deleque, "Move messages". e para que fila tem que ser enviada
